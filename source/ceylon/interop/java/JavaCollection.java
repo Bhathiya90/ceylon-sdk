@@ -1,5 +1,7 @@
 package ceylon.interop.java;
 
+import com.redhat.ceylon.compiler.java.Util;
+
 
 @com.redhat.ceylon.compiler.java.metadata.Ceylon(major = 6)
 @ceylon.language.DocAnnotation$annotation$(description = "Takes a Ceylon list of items and turns them into a Java `Collection`")
@@ -78,7 +80,7 @@ public class JavaCollection<T> implements com.redhat.ceylon.compiler.java.runtim
     final java.util.Collection<?> collection) {
 //        java.util.Collection<?> $collection$4;
 //        if (($collection$4 = collection) != null) {
-//            final java.util.Collection<java.lang.Object> $collection$5 = (Collection<Object>) $collection$4;
+//            final java.util.Collection<java.lang.Object> $collection$5 = (java.util.Collection<Object>) $collection$4;
 //            return items.containsEvery(new ceylon.interop.java.CeylonIterable<java.lang.Object>(ceylon.language.Object.$TypeDescriptor, $collection$5));
 //        } else {
             return false;
@@ -101,7 +103,7 @@ public class JavaCollection<T> implements com.redhat.ceylon.compiler.java.runtim
     @java.lang.Override
     @com.redhat.ceylon.compiler.java.metadata.TypeInfo("java.util::Iterator<T>")
     public final java.util.Iterator<T> iterator() {
-    	return null;
+        return null;
 //        return new ceylon.interop.java.JavaIterator<T>($reifiedT, items.iterator());
     }
     
@@ -149,14 +151,12 @@ public class JavaCollection<T> implements com.redhat.ceylon.compiler.java.runtim
 
     @java.lang.Override
     public final java.lang.Object[] toArray() {
-        return com.redhat.ceylon.compiler.java.language.arrays_.get_().<T>toObjectArray($reifiedT, items);
+        return Util.collectIterable(items).toArray();
     }
 
     @java.lang.Override
     public <S> S[] toArray(S[] arr) {
-        T[] tmp = com.redhat.ceylon.compiler.java.language.arrays_.get_().<T>toObjectArray($reifiedT, items);
-        System.arraycopy(tmp, 0, arr, 0, arr.length);
-        return arr;
+		return Util.collectIterable(items).toArray(arr);
     }
     
     @ceylon.language.SharedAnnotation$annotation$

@@ -4,8 +4,32 @@ see (`class LinkedList`, `class ArrayList`)
 by("Stéphane Épardaud")
 shared interface MutableList<Element> 
         satisfies List<Element> & 
-                  Cloneable<MutableList<Element>> {
+                  ListMutator<Element> {
     
+    "Remove the element at the specified [[index]], 
+     returning the removed element, if any, or `null` if 
+     there was no such element."
+    shared actual formal Element? delete(Integer index);
+    
+    "Remove the element with index `0` from this list, 
+     returning the removed element, or `null` if there was 
+     no such element."
+    shared actual default Element? deleteFirst() => delete(0);
+    
+    "Remove the element with index `size-1` from this list, 
+     returning the removed element, or `null` if there was 
+     no such element."
+    shared actual default Element? deleteLast() => delete(size-1);
+    
+    shared actual formal MutableList<Element> clone();
+    
+}
+
+"Protocol for mutation of a [[MutableList]]."
+see (`interface MutableList`)
+shared interface ListMutator<in Element> 
+        satisfies List<Anything> {
+
     "Add the given [[element]] to the end of this list,
      incrementing the [[length|List.size]] of the list."
     shared formal void add(Element element);
@@ -29,15 +53,24 @@ shared interface MutableList<Element>
     shared formal void insert(Integer index, Element element);
     
     "Remove the element at the specified [[index]], 
-     returning the removed element, or `null` if there was 
-     no such element."
-    shared formal Element? delete(Integer index);
+     returning the removed element, if any, or `null` if 
+     there was no such element."
+    shared formal Anything delete(Integer index);
     
     "Remove all occurrences of the given [[value|element]] 
-     from this list."
-    shared formal void removeAll(
+     from this list.
+     
+     To remove just one occurrence of the given value, use 
+     [[removeFirst]] or [[removeLast]]."
+    shared formal void remove(
             "The non-null value to remove"
             Element&Object element);
+    
+    "Remove all occurrences of every one of the given 
+     [[values|elements]] from this list."
+    shared formal void removeAll(
+            "The non-null values to remove"
+            {Element&Object*} elements);
     
     "Remove the first occurrence of the given 
      [[value|element]] from this list, if any, returning 
@@ -47,14 +80,25 @@ shared interface MutableList<Element>
             "The non-null value to remove"
             Element&Object element);
     
+    "Remove the last occurrence of the given 
+     [[value|element]] from this list, if any, returning 
+     `true` if the value occurs in the list, or `false` 
+     otherwise."
+    shared formal Boolean removeLast(
+            "The non-null value to remove"
+            Element&Object element);
+    
     "Remove all null elements from this list, leaving a list
      with no null elements."
     shared formal void prune();
     
     "Replace all occurrences of the given [[value|element]]
      in this list with the given [[replacement 
-     value|replacement]]."
-    shared formal void replaceAll(
+     value|replacement]].
+     
+     To replace just one occurrence of the given value, use 
+     [[replaceFirst]] or [[replaceLast]]."
+    shared formal void replace(
             "The non-null value to replace"
             Element&Object element,
             "The replacement value"
@@ -65,6 +109,16 @@ shared interface MutableList<Element>
      [[replacement value|replacement]], returning `true` if
      the value occurs in the list, or `false` otherwise."
     shared formal Boolean replaceFirst(
+            "The non-null value to replace"
+            Element&Object element,
+            "The replacement value"
+            Element replacement);
+    
+    "Replace the last occurrence of the given
+     [[value|element]] in this list, if any, with the given
+     [[replacement value|replacement]], returning `true` if
+     the value occurs in the list, or `false` otherwise."
+    shared formal Boolean replaceLast(
             "The non-null value to replace"
             Element&Object element,
             "The replacement value"
@@ -83,12 +137,12 @@ shared interface MutableList<Element>
     "Remove the element with index `0` from this list, 
      returning the removed element, or `null` if there was 
      no such element."
-    shared default Element? deleteFirst() => delete(0);
+    shared formal Anything deleteFirst();
     
     "Remove the element with index `size-1` from this list, 
      returning the removed element, or `null` if there was 
      no such element."
-    shared default Element? deleteLast() => delete(size-1);
+    shared formal Anything deleteLast();
     
     "Remove every element with an index in the spanned range 
      `from..to`."

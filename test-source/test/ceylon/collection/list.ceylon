@@ -113,7 +113,7 @@ void doListTests(MutableList<String> l) {
     l.add("end");
     assertEquals("{ foo, bar, empty, empty, empty, last, end }", l.string);
     assertEquals(7, l.size);
-    l.removeAll("empty");
+    l.remove("empty");
     assertEquals("{ foo, bar, last, end }", l.string);
     assertEquals(4, l.size);
     l.truncate(3);
@@ -154,4 +154,26 @@ shared test void testListConstructor(){
     assertEquals(2, list.size);
     assertEquals("a", list[0]);
     assertEquals("b", list[1]);
+}
+
+"See [ceylon/ceylon-sdk#183](https://github.com/ceylon/ceylon-sdk/issues/183)."
+shared test void testLinkedListIssue183(){
+    LinkedList<Integer> l = LinkedList<Integer>();
+    l.add(1);
+    l.add(2);
+    l.add(3);
+    l.deleteLast();
+    l.add(4);
+    l.deleteLast(); // in #183, this call crashes
+    assertEquals(l.size, 2);
+    assertEquals(l, LinkedList{1, 2});
+}
+
+"See [comment on ceylon/ceylon-sdk#183](https://github.com/ceylon/ceylon-sdk/issues/183#issuecomment-32129109)"
+shared test void testLinkedListOtherIssue183(){
+    LinkedList<Integer> l = LinkedList<Integer>();
+    l.add(0);
+    l.add(1);
+    assertEquals(l.delete(1), 1);
+    assertEquals(l, LinkedList{0});
 }

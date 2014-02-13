@@ -1,35 +1,41 @@
-"Library providing general-purpose mutable lists, 
- sets, and maps.
+"Library providing general-purpose mutable lists, sets, and 
+ maps.
  
- The following interfaces define abstract mutable 
- collection types:
+ The following interfaces define abstract mutable collection 
+ types:
  
  - [[MutableList]] is a mutable [[List]],
  - [[MutableSet]] is a mutable [[Set]], and
  - [[MutableMap]] is a mutable [[Map]].
  
+ These interfaces define abstract sorted collection types:
+ 
+ - [[SortedSet]] is a sorted [[Set]], and
+ - [[SortedMap]] is a sorted [[Map]].
+ 
+ In addition, dedicated [[Stack]] and [[Queue]] interfaces 
+ are defined, representing specialized kinds of lists.
+ 
  These concrete implementations are provided:
  
- - [[ArrayList]] is a `MutableList` implemented 
-   using an [[Array]].
- - [[LinkedList]] is a `MutableList` implemented 
-   using a singly-linked list.
- - [[HashSet]] is a hash set implemented using an
+ - [[ArrayList]] is a `MutableList` implemented using an
+   [[Array]].
+ - [[LinkedList]] is a `MutableList` implemented using a
+   singly-linked list.
+ - [[HashSet]] is a mutable hash set implemented using an 
    [[Array]] of singly-linked lists.
- - [[HashMap]] is a hash map implemented using an
+ - [[HashMap]] is a mutable hash map implemented using an 
    [[Array]] of singly-linked lists of [[Entry]]s.
+ - [[TreeSet]] is a mutable `SortedSet` implemented using a 
+   red/black binary tree.
+ - [[TreeMap]] is a mutable `SortedMap` implemented using a 
+   red/black binary tree.
  
- The classes [[ImmutableList]], [[ImmutableSet]],
- and [[ImmutableMap]] may be used to hide these
- mutable list, set, and map implementations from 
- clients. 
+ The functions [[unmodifiableList]], [[unmodifiableSet]],
+ and [[unmodifiableMap]] may be used to hide these mutable 
+ list, set, and map implementations from clients. 
  
- In addition, dedicated [[Stack]] and [[Queue]]
- interfaces are defined, representing specialized
- kinds of lists.
- 
- Finally, [[IdentitySet]] and [[IdentityMap]] are
- provided."
+ Finally, [[IdentitySet]] and [[IdentityMap]] are provided."
 
 by("Stéphane Épardaud")
 license("Apache Software License")

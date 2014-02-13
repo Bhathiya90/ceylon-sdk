@@ -26,7 +26,7 @@ import ceylon.collection {
  The management of the backing array is controlled by the
  given [[hashtable]]."
 
-by("Stéphane Épardaud")
+by ("Stéphane Épardaud")
 shared class HashMap<Key, Item>
         (stability=linked, hashtable = Hashtable(), entries = {})
         satisfies MutableMap<Key, Item>
@@ -141,16 +141,16 @@ shared class HashMap<Key, Item>
     
     // End of initialiser section
     
-    shared actual Item? put(Key key, Item item){
+    shared actual Item? put(Key key, Item item) {
         Integer index = storeIndex(key, store);
         value entry = key->item;
         variable value bucket = store[index];
         while(exists cell = bucket){
             if(cell.element.key == key){
-                Item oldValue = cell.element.item;
+                Item oldItem = cell.element.item;
                 // modify an existing entry
                 cell.element = entry;
-                return oldValue;
+                return oldItem;
             }
             bucket = cell.rest;
         }
@@ -161,7 +161,7 @@ shared class HashMap<Key, Item>
         return null;
     }
     
-    shared actual void putAll({<Key->Item>*} entries){
+    shared actual void putAll({<Key->Item>*} entries) {
         for(entry in entries){
             if(addToStore(store, entry)){
                 length++;
@@ -299,12 +299,12 @@ shared class HashMap<Key, Item>
     
     shared actual Integer hash {
         variable Integer index = 0;
-        variable Integer hash = 17;
+        variable Integer hash = 0;
         // walk every bucket
-        while(index < store.size){
+        while (index < store.size){
             variable value bucket = store[index];
-            while(exists cell = bucket){
-                hash = hash * 31 + cell.element.hash;
+            while (exists cell = bucket){
+                hash += cell.element.hash;
                 bucket = cell.rest;
             }
             index++;
@@ -336,7 +336,7 @@ shared class HashMap<Key, Item>
         return false;
     }
     
-    shared actual MutableMap<Key,Item> clone {
+    shared actual MutableMap<Key,Item> clone() {
         value clone = HashMap<Key,Item>();
         clone.length = length;
         clone.store = entryStore<Key,Item>(store.size);
@@ -344,7 +344,7 @@ shared class HashMap<Key, Item>
         // walk every bucket
         while(index < store.size){
             if(exists bucket = store[index]){
-                clone.store.set(index, bucket.clone); 
+                clone.store.set(index, bucket.clone()); 
             }
             index++;
         }

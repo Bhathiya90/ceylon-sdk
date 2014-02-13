@@ -1,13 +1,24 @@
-import ceylon.file { Path, current, Reader, Writer }
-import ceylon.process.internal { ConcreteProcess, environment }
+import ceylon.file {
+    Path,
+    current,
+    Reader,
+    Writer
+}
+import ceylon.process.internal {
+    ConcreteProcess,
+    environment
+}
 
 "Represents a separate native process."
 see(`function createProcess`)
 shared interface Process {
     
-    "A _command_, usually a program with a list
-     of its arguments."
+    "A _command_, usually the name or path of 
+     a program to execute."
     formal shared String command;
+    
+    "The arguments to the [[command]]."
+    formal shared {String*} arguments;
     
     "The directory in which the process runs."
     formal shared Path path;
@@ -53,11 +64,14 @@ shared interface Process {
  given command."
 shared Process createProcess(
         "The _command_ to be run in the new 
-         process, usually a program with a list 
-         of its arguments."
+         process, usually the name or path of a 
+         program. Command arguments must be passed
+         via the [[arguments]] sequence."
         String command,
+        "The arguments to the [[command]]."
+        {String*} arguments = {},
         "The directory in which the process runs."
-        Path path=current,
+        Path path = current,
         "The source for the standard input stream
          of the process, or `null` if the standard 
          input should be piped from the current 
@@ -69,7 +83,7 @@ shared Process createProcess(
          current process."
         Output? output = null,
         "The destination for the standard output 
-         stream ofthe process, or `null` if the 
+         stream of the process, or `null` if the 
          standard error should be piped to the 
          current process."
         Error? error = null,
@@ -78,8 +92,8 @@ shared Process createProcess(
          the environment variables of the current
          virtual machine process."
         <String->String>* environment) => 
-            ConcreteProcess(command, path, input, output, 
-                    error, environment);
+            ConcreteProcess(command, arguments, path, 
+                    input, output, error, environment);
 
 "A source for the standard input stream of a process."
 shared interface Input 

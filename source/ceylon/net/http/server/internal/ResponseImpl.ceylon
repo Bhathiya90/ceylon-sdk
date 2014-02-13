@@ -7,7 +7,7 @@ import ceylon.net.http { Header }
 import ceylon.collection { MutableList, LinkedList }
 
 import java.io { JIOException=IOException }
-import java.lang { arrays, ByteArray, Runnable }
+import java.lang { ByteArray, Runnable }
 import java.nio { 
     JByteBuffer=ByteBuffer { wrapByteBuffer=wrap }}
 import org.xnio.channels { StreamSinkChannel }
@@ -57,7 +57,7 @@ shared class ResponseImpl(HttpServerExchange exchange, Charset defaultCharset)
     shared actual void writeBytes(Array<Integer> bytes) {
         applyHeadersToExchange();
 
-        value jByteBuffer = wrapByteBuffer(arrays.asByteArray(bytes));
+        value jByteBuffer = wrapByteBuffer(toByteArray(bytes));
         writeJByteBuffer(jByteBuffer);
     }
     
@@ -67,7 +67,7 @@ shared class ResponseImpl(HttpServerExchange exchange, Charset defaultCharset)
             Callable<Anything, [Exception]>? onError) {
 
         applyHeadersToExchange();
-        value jByteBuffer = wrapByteBuffer(arrays.asByteArray(bytes));
+        value jByteBuffer = wrapByteBuffer(toByteArray(bytes));
         writeJByteBufferAsynchronous(jByteBuffer, IoCallbackWrapper(onCompletion, onError));
     }
     

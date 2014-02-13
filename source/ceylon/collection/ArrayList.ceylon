@@ -42,8 +42,17 @@ shared class ArrayList<Element>
     function store(Integer capacity)
             => arrayOfSize<Element?>(capacity, null);
     
-    variable Array<Element?> array = store(initialCapacity);
-    variable Integer length=0;
+    variable Array<Element?> array;
+    variable Integer length;
+    
+    if (is List<Element> elements) {
+        length = elements.size;
+        array = store(length>initialCapacity then length else initialCapacity);
+    }
+    else {
+        length = 0;
+        array = store(initialCapacity);
+    }
     
     void grow(Integer increment) {
         value neededCapacity = length+increment;
@@ -61,12 +70,28 @@ shared class ArrayList<Element>
         }
     }
     
-    //grow(elements.size-initialCapacity);
-    for (element in elements) {
-        grow(1);
-        array.set(length++, element);
+    if (is List<Element> elements) {
+        if (is ArrayList<Element> elements) {
+            elements.array.copyTo(array, 0, 0, length);
+        }
+        else {
+            /*variable value i=0;
+             while (i<length) {
+             array.set(i, elements[i]);
+             i++;
+             }*/
+            for (element in elements) {
+                array.set(length++, element);
+            }
+        }
     }
-
+    else {
+        for (element in elements) {
+            grow(1);
+            array.set(length++, element);
+        }
+    }
+    
     shared actual void add(Element element) {
         grow(1);
         array.set(length++, element);
@@ -131,12 +156,31 @@ shared class ArrayList<Element>
         }
     }
     
-    shared actual void removeAll(Element&Object element) {
+    shared actual void remove(Element&Object element) {
         variable value i=0;
         variable value j=0;
         while (i<length) {
             if (exists elem = array[i++]) {
                 if (elem!=element) {
+                    array.set(j++,elem);
+                }
+            }
+            else {
+                array.set(j++, null);
+            }
+        }
+        length=j;
+        while (j<i) {
+            array.set(j++, null);
+        }
+    }
+    
+    shared actual void removeAll({<Element&Object>*} elements) {
+        variable value i=0;
+        variable value j=0;
+        while (i<length) {
+            if (exists elem = array[i++]) {
+                if (elem in elements) {
                     array.set(j++,elem);
                 }
             }
@@ -160,6 +204,16 @@ shared class ArrayList<Element>
         }
     }
     
+    shared actual Boolean removeLast(Element&Object element) {
+        if (exists index = lastOccurrence(element)) {
+            delete(index);
+            return true;
+        }
+        else {
+            return false;
+        }
+    }
+    
     shared actual void prune() {
         variable value i=0;
         variable value j=0;
@@ -174,7 +228,7 @@ shared class ArrayList<Element>
         }
     }
     
-    shared actual void replaceAll(Element&Object element, 
+    shared actual void replace(Element&Object element, 
             Element replacement) {
         variable value i=0;
         while (i<length) {
@@ -187,6 +241,17 @@ shared class ArrayList<Element>
     shared actual Boolean replaceFirst(Element&Object element, 
             Element replacement) {
         if (exists index = firstOccurrence(element)) {
+            set(index, element);
+            return true;
+        }
+        else {
+            return false;
+        }
+    }
+    
+    shared actual Boolean replaceLast(Element&Object element, 
+    Element replacement) {
+        if (exists index = lastOccurrence(element)) {
             set(index, element);
             return true;
         }
@@ -334,7 +399,7 @@ shared class ArrayList<Element>
     
     hash => (super of List<Element>).hash;
     
-    clone => ArrayList(size, growthFactor, this);
+    clone() => ArrayList(size, growthFactor, this);
     
     push(Element element) => add(element);
     

@@ -1,492 +1,547 @@
-import javax.sql { DataSource }
-import java.lang { Long, JString=String }
+import ceylon.collection {
+    HashMap
+}
+import ceylon.dbc {
+    newConnectionFromDataSource
+}
+import ceylon.interop.java {
+    toIntegerArray
+}
+import ceylon.math.decimal {
+    Decimal,
+    parseDecimal
+}
+import ceylon.math.whole {
+    parseWhole
+}
+import ceylon.time {
+    today, Instant
+}
+import ceylon.time.internal {
+    GregorianDateTime,
+    GregorianDate,
+    TimeOfDay
+}
+
+import java.lang {
+    JBoolean=Boolean,
+    JInteger=Integer,
+    JLong=Long,
+    JString=String
+}
+import java.math {
+    BigDecimal,
+    BigInteger
+}
 import java.sql {
-    PreparedStatement, CallableStatement,
-    ResultSet, ResultSetMetaData,
-    Timestamp, SqlDate=Date,
+    PreparedStatement,
+    CallableStatement,
+    ResultSet,
+    ResultSetMetaData,
+    SqlTimestamp=Timestamp,
+    SqlTime=Time,
+    SqlDate=Date,
     Statement {
         returnGeneratedKeys=RETURN_GENERATED_KEYS
-    }
+    },
+    Connection
 }
-import java.util { Date }
-import java.math { BigDecimal, BigInteger }
-import ceylon.math.decimal { Decimal, parseDecimal }
-import ceylon.math.whole { Whole, parseWhole }
-import ceylon.collection { HashMap }
+import java.util {
+    Date
+}
 
-"A component that can perform queries and execute SQL statements on a
- database, via connections obtained from a JDBC DataSource."
-by("Enrique Zamudio")
-shared class Sql(DataSource ds) {
+"A row of results is represented as a [[Map]] with column
+ names as keys, and values as items."
+shared alias Row=>Map<String,Object>;
 
-    value conns = ThreadLocalConnection(ds);
-
-    PreparedStatement prepareStatement(ConnectionStatus conn, String sql, Iterable<Object> params) {
+"An object that exposes operations for executing SQL DML or
+ DDL queries against JDBC connections obtained by calling a 
+ given [[function|newConnection]]."
+by ("Enrique Zamudio", "Gavin King")
+shared class Sql(newConnection) {
+    
+    "Obtain a JDBC connection."
+    see (`function newConnectionFromDataSource`,
+        `function newConnectionFromDataSourceWithCredentials`)
+    Connection newConnection();
+    
+    value connection = ThreadLocalConnection(newConnection);
+    
+    PreparedStatement prepareStatement(ConnectionStatus conn, String sql, {Object*} arguments) {
         value stmt = conn.connection().prepareStatement(sql);
-        return prepareExistingStatement(stmt, params);
-    }
-
-    PreparedStatement prepareExistingStatement(PreparedStatement stmt, {Object*} params) {
-        //Set parameters
-        variable value i=1;
-        for (p in params) {
-            switch (p)
-            case (is Integer) { stmt.setLong(i,p); }
-            case (is Boolean) { stmt.setBoolean(i,p); }
-            //case (is Decimal) { stmt.setBigDecimal(i,p); }
-            case (is String)  { stmt.setString(i,p); }
-            case (is Date)    {
-                if (is Timestamp p) {
-                    stmt.setTimestamp(i,p);
-                } else if (is SqlDate p) {
-                    stmt.setDate(i, p);
-                } else {
-                    stmt.setDate(i, SqlDate(p.time));
-                }
-            }
-            case (is Float)   { stmt.setDouble(i, p); }
-            case (is SqlNull)  { stmt.setNull(i, p.sqlType); }
-            //TODO reader, inputStream, byte array
-            else { stmt.setObject(i,p); }
-            i++;
-        }
+        setParameters(stmt, arguments);
         return stmt;
     }
-
-    CallableStatement prepareCall(ConnectionStatus conn, String sql, Iterable<Object> params) {
-        value cs = conn.connection().prepareCall(sql);
-        /*variable value i=1;
-        for (p in params) {
-            switch (p)
-            case (is Integer) { cs.setLong(i,p); }
-            case (is Boolean) { cs.setBoolean(i,p); }
-            //case (is Decimal) { cs.setBigDecimal(i,p); }
-            case (is String)  { cs.setString(i,p); }
-            case (is Date)    {
-                if (is Timestamp p) {
-                    cs.setTimestamp(i,p, null);
-                } else if (is SqlDate p) {
-                    cs.setDate(i, p, null);
-                } else {
-                    cs.setDate(i, SqlDate(p.time), null);
+    
+    void setParameters(PreparedStatement stmt, {Object*} arguments) {
+        variable value i=1;
+        for (argument in arguments) {
+            switch (argument)
+            case (is Integer) { 
+                stmt.setLong(i,argument); 
+            }
+            case (is Boolean) { 
+                stmt.setBoolean(i,argument); 
+            }
+            case (is String)  { 
+                stmt.setString(i,argument); 
+            }
+            case (is Decimal) {
+                assert (is BigDecimal bd = argument.implementation);
+                stmt.setBigDecimal(i,bd); 
+            }
+            case (is Date) {
+                if (is SqlTimestamp argument) {
+                    stmt.setTimestamp(i, argument);
+                } 
+                else if (is SqlTime argument) {
+                    stmt.setTime(i, argument);
+                }
+                else if (is SqlDate argument) {
+                    stmt.setDate(i, argument);
+                }
+                else {
+                    stmt.setTimestamp(i, SqlTimestamp(argument.time));
                 }
             }
-            case (is Float)   { cs.setDouble(i, p); }
-            case (is DbNull)  { cs.setNull(i, p.sqlType); }
+            case (is Float) { 
+                stmt.setDouble(i, argument); 
+            }
+            case (is SqlNull) { 
+                stmt.setNull(i, argument.sqlType); 
+            }
+            case (is GregorianDateTime) {
+                stmt.setTimestamp(i, 
+                    SqlTimestamp(argument.instant().millisecondsOfEpoch));
+            }
+            case (is GregorianDate) {
+                stmt.setDate(i, 
+                    SqlDate(argument.at(TimeOfDay(0)).instant().millisecondsOfEpoch));
+            }
+            case (is TimeOfDay) {
+                stmt.setTime(i, 
+                    SqlTime(today().at(argument).instant().millisecondsOfEpoch));
+            }
             //TODO reader, inputStream, byte array
-            else { cs.setObject(i,p); }
+            else { stmt.setObject(i,argument); }
             i++;
-        }*/
-        return cs;
-    }
-
-    "Execute a SQL statement, with the given parameters. The SQL string
-     must use the '?' parameter placeholders."
-    shared default Boolean execute(String sql, Object* params) {
-        value conn = conns.get();
-        try {
-            value stmt = prepareStatement(conn, sql, params);
-            try {
-                return stmt.execute();
-            } finally {
-                stmt.close();
-            }
-        } finally {
-            conn.close();
         }
     }
-
-    "Execute a SQL statement with the given parameters, and return
-     the number of rows that were affected. This is useful for
-     DELETE or UPDATE statements. The SQL string must use the '?'
-     parameter placeholders."
-    shared default Integer update(String sql, Object* params) {
-        value conn = conns.get();
-        try {
-            value stmt = prepareStatement(conn, sql, params);
-            try {
-                return stmt.executeUpdate();
-            } finally {
-                stmt.close();
-            }
-        } finally {
-            conn.close();
-        }
+    
+    CallableStatement prepareCall(ConnectionStatus conn, String sql, {Object*} arguments) {
+        value stmt = conn.connection().prepareCall(sql);
+        setParameters(stmt, arguments);
+        return stmt;
     }
-
-    "Execute a SQL INSERT statement with the given parameters, and return
-     the generated keys (if the JDBC driver supports it). The SQL string
-     must use the '?' parameter placeholders."
-    shared default Object[][] insert(String sql, Object* params) {
-        value conn = conns.get();
-        try {
-            value stmt = conn.connection().prepareStatement(sql, returnGeneratedKeys);
+    
+    "Define a SQL [[statement|sql]] with parameters
+     indicated by `?` placeholders."
+    shared class Statement(String sql) {
+        "Execute this statement with the given [[arguments]] 
+         to its parameters."
+        shared void execute(Object* arguments) {
+            value connectionStatus = connection.get();
             try {
-                prepareExistingStatement(stmt, params);
-                value count = 1..stmt.executeUpdate();
-                value rs = stmt.generatedKeys;
+                value stmt = prepareStatement(connectionStatus, sql, arguments);
                 try {
-                    value meta = rs.metaData;
-                    value rango = 1..meta.columnCount;
-                    return count.collect {
-                        function collecting(Integer i) {
-                            rs.next();
-                            return [ for (c in rango) mapColumn(rs, meta, c).item ];
-                        }
-                    };
+                    stmt.execute();
                 } finally {
-                    rs.close();
+                    stmt.close();
                 }
             } finally {
-                stmt.close();
+                connectionStatus.close();
             }
-        } finally {
-            conn.close();
         }
     }
-
-    "Execute a SQL callable statement, returning the number of rows
-     that were affected. This is useful to call database functions or
-     stored procedures that update or delete rows. The SQL string must
-     use the '?' parameter placeholers."
-    shared default Integer callUpdate(String sql, Object* params) {
-        value conn = conns.get();
-        try {
-            value stmt = prepareCall(conn, sql, params);
+    
+    "Define a SQL `update` or `delete` [[statement|sql]] 
+     with parameters indicated by `?` placeholders."
+    shared class Update(String sql) {
+        "Execute this statement with the given [[arguments]] 
+         to its parameters, returning the number of affected 
+         rows."
+        shared Integer execute(Object* arguments) {
+            value connectionStatus = connection.get();
             try {
-                return stmt.executeUpdate();
-            } finally {
-                stmt.close();
-            }
-        } finally {
-            conn.close();
-        }
-    }
-
-    shared default Map<Integer, Object>? call(String sql, Object* params) {
-        return null;
-    }
-
-    "Execute a SQL query with the given parameters and return the
-     resulting rows. The SQL string must use the '?' parameter placeholders."
-    shared default Map<String, Object>[] rows(
-            "The SQL query."
-            String sql,
-            "The limit of rows to return. Default is -1 which means return all rows."
-            Integer limit=-1,
-            "The number of rows to skip from the result. Default is 0."
-            Integer offset=0)
-            ("The parameters passed to the SQL query."
-            Object[] params) {
-        value conn = conns.get();
-        try {
-            value stmt = prepareStatement(conn, sql, params);
-            if (limit > 0 && offset <= 0) {
-                stmt.maxRows=limit;
-            }
-            try {
-                value rs = stmt.executeQuery();
+                value stmt = prepareStatement(connectionStatus, sql, arguments);
                 try {
-                    value meta = rs.metaData;
+                    return stmt.executeUpdate();
+                } finally {
+                    stmt.close();
+                }
+            } finally {
+                connectionStatus.close();
+            }
+        }
+        
+        "Execute this statement multiple times, as a batch
+         update, once for each given sequence of arguments, 
+         returning a sequence containing the numbers of rows 
+         affected by each update in the batch."
+        shared Integer[] executeBatch({[Object*]*} batchArguments,
+                "The maximum number of inserts that will be
+                 batched into memory before being sent to
+                 the database."
+                Integer maxBatchSize=250) {
+            "maximum batch size must be strictly positive"
+            assert (maxBatchSize>0);
+            if (exists firstArgs = batchArguments.first) {
+                assert (batchArguments.fold(true, 
+                        (Boolean consistent, Object[] args) => 
+                                consistent && args.size==firstArgs.size));
+                value connectionStatus = connection.get();
+                try {
+                    value stmt = connectionStatus.connection()
+                            .prepareStatement(sql);
+                    value result = SequenceBuilder<Integer>();
+                    void runBatch()
+                            => result.appendAll(toIntegerArray(stmt.executeBatch()));
+                    variable value count=0;
+                    try {                    
+                        for (arguments in batchArguments) {
+                            setParameters(stmt, arguments);
+                            stmt.addBatch();
+                            if (++count>maxBatchSize) {
+                                runBatch();
+                                count=0;
+                            }
+                        }
+                        if (count!=0) {
+                            runBatch();
+                        }
+                        return result.sequence;
+                    }
+                    finally {
+                        stmt.close();
+                    }
+                }
+                finally {
+                    connectionStatus.close();
+                }
+            }
+            else {
+                return [];
+            }
+        }
+        
+    }
+    
+    "Define a SQL `insert` [[statement|sql]] with parameters 
+     indicated by `?` placeholders."
+    shared class Insert(String sql) {
+        
+        "Execute this statement with the given [[arguments]] 
+         to its parameters, returning number of rows 
+         inserted, and the generated keys, if any."
+        shared [Integer,Row[]] execute(Object* arguments) {
+            value connectionStatus = connection.get();
+            try {
+                value stmt = connectionStatus.connection()
+                        .prepareStatement(sql, returnGeneratedKeys);
+                try {
+                    setParameters(stmt, arguments);
+                    value updateCount = stmt.executeUpdate();
+                    value resultSet = stmt.generatedKeys;
+                    try {
+                        value meta = resultSet.metaData;
+                        value range = 1..meta.columnCount;
+                        value builder = SequenceBuilder<Row>();
+                        while (resultSet.next()) {
+                            builder.append(HashMap { for (i in range) columnEntry(resultSet, meta, i) });
+                        }
+                        return [updateCount, builder.sequence];
+                    }
+                    finally {
+                        resultSet.close();
+                    }
+                }
+                finally {
+                    stmt.close();
+                }
+            }
+            finally {
+                connectionStatus.close();
+            }
+        }
+        
+        "Execute this statement multiple times, as a batch
+         insert, once for each given sequence of arguments, 
+         returning a sequence containing the numbers of rows 
+         affected by each insert in the batch."
+        shared void executeBatch({[Object*]*} batchArguments,
+                "The maximum number of inserts that will be
+                 batched into memory before being sent to
+                 the database."
+                Integer maxBatchSize=250) {
+            "maximum batch size must be strictly positive"
+            assert (maxBatchSize>0);
+            if (exists firstArgs = batchArguments.first) {
+                assert (batchArguments.fold(true, 
+                (Boolean consistent, Object[] args) => 
+                        consistent && args.size==firstArgs.size));
+                value connectionStatus = connection.get();
+                try {
+                    value stmt = connectionStatus.connection()
+                            .prepareStatement(sql);
+                    value result = SequenceBuilder<Integer>();
+                    void runBatch()
+                            => result.appendAll(toIntegerArray(stmt.executeBatch()));
+                    variable value count=0;
+                    try {                    
+                        for (arguments in batchArguments) {
+                            setParameters(stmt, arguments);
+                            stmt.addBatch();
+                            if (++count>maxBatchSize) {
+                                runBatch();
+                                count=0;
+                            }
+                        }
+                        if (count!=0) {
+                            runBatch();
+                        }
+                        //TODO: generated keys?
+                    }
+                    finally {
+                        stmt.close();
+                    }
+                }
+                finally {
+                    connectionStatus.close();
+                }
+            }
+        }
+        
+    }
+    
+    "Define a SQL callable [[statement|sql]], with 
+     parameters indicated by `?` placeholders. Intended for 
+     calling database functions or stored procedures that 
+     update or delete rows."
+    shared class Call(String sql) {
+        "Execute this statement with the given [[arguments]] 
+         to its parameters, returning the number of affected 
+         rows."
+        shared Integer execute(Object* arguments) {
+            value connectionStatus = connection.get();
+            try {
+                value stmt = prepareCall(connectionStatus, sql, arguments);
+                try {
+                    return stmt.executeUpdate();
+                } finally {
+                    stmt.close();
+                }
+            } finally {
+                connectionStatus.close();
+            }
+        }
+    }
+    
+    "Define a SQL `select` [[query|sql]] with parameters 
+     indicated by `?` placeholders."
+    shared class Select(String sql) {
+        
+        "An optional limit to the number of rows to return."
+        shared variable Integer? limit=null;
+        
+        "Execute this query with the given [[arguments]] 
+         to its parameters, returning a sequence of [[Row]]s."
+        shared Row[] execute(Object* arguments) {
+            try (results = Results(*arguments)) {
+                return results.sequence;
+            }
+        }
+        
+        "Execute this query with the given [[arguments]] 
+         to its parameters, and for each resulting [[Row]],
+         call the given [[function|do]]."
+        shared void forEachRow(Object* arguments)(void do(Row row)) {
+            try (results = Results(*arguments)) {
+                for (row in results) {
+                    do(row);
+                }
+            }
+        }
+        
+        "Execute this query with the given [[arguments]] to 
+         its parameters, returning a single value. The query 
+         result must be single row/single column containing
+         a value assignable to the given type.
+         
+             value count = sql.Select(\"select count(*) from table\")
+                     .singleValue<Integer>();"
+        shared Value singleValue<Value>(Object* arguments) {
+            value rows = execute(*arguments);
+            "SQL query must return a single row containing a 
+             single value of the given type"
+            assert(exists row = rows[0], 
+                   rows.size == 1, 
+                   row.size == 1, 
+                   is Value v = row.values.first);
+            return v;
+        }        
+        
+        "Execute this query with the given [[arguments]] to 
+         its parameters. The resulting instance of `Results` 
+         may be iterated, producing [[Row]]s lazily.
+         
+         Should be instantiated using `try`:
+         
+             try (results = sql.Select(\"select * from table\").Results()) {
+                 for (row in results) {
+                     //read the row here
+                 }
+             }"
+        shared class Results(Object* arguments)
+                satisfies Closeable & {Row*} {
+            
+            variable ConnectionStatus? connectionStatus=null;
+            variable PreparedStatement? preparedStatement=null;
+            variable {Object*} resultSets={}; //TODO: should be ResultSet, nasty hack to work around backend bug!
+            
+            shared actual void open() {
+                value connectionStatus = connection.get();
+                this.connectionStatus = connectionStatus;
+                value preparedStatement = prepareStatement(connectionStatus, sql, arguments);
+                this.preparedStatement = preparedStatement;
+                if (exists maxRows = limit) {
+                    preparedStatement.maxRows=maxRows;
+                }
+            }
+            
+            shared actual Iterator<Row> iterator() {
+                object iterator
+                        satisfies Iterator<Row> {
+                    //TODO: nasty hack to work around backend bug!
+                    value preparedStatement {
+                        assert (exists ps = outer.preparedStatement);
+                        return ps;
+                    }
+                    value resultSet = preparedStatement.executeQuery();
+                    resultSets = resultSets.following(resultSet);
+                    value meta = resultSet.metaData;
                     value range = 1..meta.columnCount;
-                    value cont = offset > 0 then (1..offset).every((Integer x) => rs.next()) else true;
-                    value sb = SequenceBuilder<Map<String, Object>>();
-                    if (limit > 0) {
-                        variable value count = 0;
-                        while (count < limit && rs.next()) {
-                            sb.append(HashMap{for (i in range) mapColumn(rs, meta, i)});
-                            count++;
+                    shared actual Row|Finished next() {
+                        if (resultSet.next()) {
+                            return HashMap { for (i in range) columnEntry(resultSet, meta, i) };
                         }
-                    } else if (cont) {
-                        while (rs.next()) {
-                            sb.append(HashMap{for (i in range) mapColumn(rs, meta, i)});
+                        else {
+                            return finished;
                         }
                     }
-                    return sb.sequence;
-                } finally {
-                    rs.close();
                 }
-            } finally {
-                stmt.close();
+                return iterator;
             }
-        } finally {
-            conn.close();
-        }
-    }
-
-    "Execute a SQL query with the given parameters, and return the first
-     row from the result only. The SQL string must use the '?' parameter
-     placeholders."
-    shared default Map<String, Object>? firstRow(String sql, Object* params) {
-        value conn = conns.get();
-        try {
-            value stmt = prepareStatement(conn, sql, params);
-            stmt.maxRows=1;
-            try {
-                value rs = stmt.executeQuery();
-                try {
-                    value meta = rs.metaData;
-                    value range = 1..meta.columnCount;
-                    if (rs.next()) {
-                        return HashMap{ for (i in range) mapColumn(rs, meta, i) };
+            
+            shared actual void close(Exception? exception) {
+                for (resultSet in this.resultSets) {
+                    try {
+                        assert (is ResultSet resultSet); //TODO: should not be necessary, nasty hack to work around backend bug!
+                        resultSet.close();
                     }
-                } finally {
-                    rs.close();
+                    catch (e) {}
                 }
-            } finally {
-                stmt.close();
-            }
-        } finally {
-            conn.close();
-        }
-        return null;
-    }
-
-    "Execute a SQL query with the given parameters, and return the first
-     column of the first result, as an Integer value. The SQL string must
-     use the '?' parameter placeholders."
-    shared default Integer? queryForInteger(String sql, Object* params) {
-        value conn = conns.get();
-        try {
-            value stmt = prepareStatement(conn, sql, params);
-            stmt.maxRows=1;
-            try {
-                value rs = stmt.executeQuery();
-                try {
-                    rs.next();
-                    return rs.getLong(1);
-                } finally {
-                    rs.close();
-                }
-            } finally {
-                stmt.close();
-            }
-        } finally {
-            conn.close();
-        }
-    }
-
-    "Execute a SQL query with the given parameters, and return the first
-     column of the first result, as a Float. The SQL string must
-     use the '?' parameter placeholders."
-    shared default Float? queryForFloat(String sql, Object* params) {
-        value conn = conns.get();
-        try {
-            value stmt = prepareStatement(conn, sql, params);
-            stmt.maxRows=1;
-            try {
-                value rs = stmt.executeQuery();
-                try {
-                    rs.next();
-                    return rs.getDouble(1);
-                } finally {
-                    rs.close();
-                }
-            } finally {
-                stmt.close();
-            }
-        } finally {
-            conn.close();
-        }
-    }
-
-    "Execute a SQL query with the given parameters, and return the first
-     column of the first result, as a Boolean. The SQL string must
-     use the '?' parameter placeholders."
-    shared default Boolean? queryForBoolean(String sql, Object* params) {
-        value conn = conns.get();
-        try {
-            value stmt = prepareStatement(conn, sql, params);
-            stmt.maxRows=1;
-            try {
-                value rs = stmt.executeQuery();
-                try {
-                    rs.next();
-                    return rs.getBoolean(1);
-                } finally {
-                    rs.close();
-                }
-            } finally {
-                stmt.close();
-            }
-        } finally {
-            conn.close();
-        }
-    }
-
-    "Execute a SQL query with the given parameters, and return the first
-     column of the first result, as a Decimal. The SQL string must
-     use the '?' parameter placeholders."
-    shared default Decimal? queryForDecimal(String sql, Object* params) {
-        value conn = conns.get();
-        try {
-            value stmt = prepareStatement(conn, sql, params);
-            stmt.maxRows=1;
-            try {
-                value rs = stmt.executeQuery();
-                try {
-                    rs.next();
-                    if (exists d=rs.getBigDecimal(1)) {
-                        //TODO optimize this
-                        return parseDecimal(d.toPlainString());
+                this.resultSets = [];
+                if (exists preparedStatement = this.preparedStatement) {
+                    try {
+                        preparedStatement.close();
                     }
-                    return null;
-                } finally {
-                    rs.close();
+                    catch (e) {}
                 }
-            } finally {
-                stmt.close();
-            }
-        } finally {
-            conn.close();
-        }
-    }
-
-    "Execute a SQL query with the given parameters, and return the first
-     column of the first result, as a Whole. The SQL string must
-     use the '?' parameter placeholders."
-    shared default Whole? queryForWhole(String sql, Object* params) {
-        return null;
-    }
-
-    "Execute a SQL query with the given parameters, and return the first
-     column of the first result, as a String. The SQL string must
-     use the '?' parameter placeholders."
-    shared default String? queryForString(String sql, Object* params) {
-        value conn = conns.get();
-        try {
-            value stmt = prepareStatement(conn, sql, params);
-            stmt.maxRows=1;
-            try {
-                value rs = stmt.executeQuery();
-                try {
-                    rs.next();
-                    if (exists s=rs.getString(1)) {
-                        return s;
+                this.preparedStatement = null;
+                if (exists connectionStatus = this.connectionStatus) {
+                    try {
+                        connectionStatus.close();
                     }
-                    return null;
-                } finally {
-                    rs.close();
+                    catch (e) {}
                 }
-            } finally {
-                stmt.close();
+                this.connectionStatus = null;
             }
-        } finally {
-            conn.close();
+            
         }
+        
     }
-
-    "Execute a SQL query with the given parameters, and return the first
-     column of the first result, as a Float. The SQL string must
-     use the '?' parameter placeholders."
-    shared default Value? queryForValue<Value>(String sql, Object* params)
-            given Value satisfies Object {
-        value conn = conns.get();
-        try {
-            value stmt = prepareStatement(conn, sql, params);
-            stmt.maxRows=1;
-            try {
-                value rs = stmt.executeQuery();
+    
+    "Begin a new database transaction. If [[rollbackOnly]]
+     is called, or if an exception propagates out of `try`, 
+     the transaction will be rolled back. Otherwise, the 
+     transaction will be committed.
+     
+     Should be instantiated using `try`:
+     
+         try (tx = sql.Transaction()) {
+             //do work here
+             if (something) {
+                 tx.rollbackOnly();
+             }
+         }"
+    shared class Transaction() satisfies Closeable {
+        
+        variable value rollback = false;
+        
+        "Set the transaction to roll back."
+        shared void rollbackOnly() {
+            rollback=true;
+        }
+        
+        variable ConnectionStatus? connectionStatus=null;
+        
+        shared actual void open() {
+            value connectionStatus = connection.get();
+            this.connectionStatus = connectionStatus;
+            connectionStatus.beginTransaction();
+        }
+        
+        shared actual void close(Exception? exception) {
+            if (exists connectionStatus = this.connectionStatus) {
                 try {
-                    rs.next();
-                    /*if (is Value s=rs.getObject(1)) {
-                        return s;
-                    }*/
-                    return null;
-                } finally {
-                    rs.close();
-                }
-            } finally {
-                stmt.close();
-            }
-        } finally {
-            conn.close();
-        }
-    }
-
-    "Execute the passed Callable within a database transaction. If any
-     exception is thrown from within the Callable, the transaction will
-     be rolled back; otherwise it is committed."
-    shared default void transaction(Boolean do()) {
-        value conn = conns.get();
-        conn.beginTransaction();
-        variable value ok = false;
-        try {
-            ok = do();
-        } finally {
-            try {
-                if (ok) {
-                    conn.commit();
-                } else {
-                    conn.rollback();
-                }
-            } finally {
-                conn.close();
-            }
-        }
-    }
-
-    "Execute a SQL query with the given parameters, and call the specified method
-     with each obtained row."
-    shared default void eachRow(
-            "The SQL query to execute."
-            String sql,
-            "The method to call with each row."
-            void body(Map<String, Object> row),
-            "The maximum number of rows to process. Default -1 which means all rows."
-            Integer limit=-1,
-            "The number of rows to skip from the result before starting processing. Default 0."
-            Integer offset=0,
-            "The parameters to pass to the SQL query."
-            Object* params) {
-        value conn = conns.get();
-        try {
-            value stmt = prepareStatement(conn, sql, params);
-            if (limit > 0 && offset <= 0) {
-                stmt.maxRows=limit;
-            }
-            try {
-                value rs = stmt.executeQuery();
-                try {
-                    value meta = rs.metaData;
-                    value range = 1..meta.columnCount;
-                    value cont = offset > 0 then (1..offset).every((Integer x) => rs.next()) else true;
-                    if (limit > 0) {
-                        variable value count = 0;
-                        while (count < limit && rs.next()) {
-                            body(LazyMap({for (i in range) mapColumn(rs, meta, i)}));
-                            count++;
-                        }
-                    } else if (cont) {
-                        while (rs.next()) {
-                            body(LazyMap({for (i in range) mapColumn(rs, meta, i)}));
-                        }
+                    if (rollback||exception exists) {
+                        connectionStatus.rollback();
                     }
-                    return;
-                } finally {
-                    rs.close();
+                    else {
+                        connectionStatus.commit();
+                    }
                 }
-            } finally {
-                stmt.close();
+                finally {
+                    connectionStatus.close();
+                }
             }
-        } finally {
-            conn.close();
+            this.connectionStatus = null;
+        }
+        
+    }
+    
+    "Execute the given [[function|do]] in a new database 
+     transaction. If the function returns `false`, or if an 
+     exception is thrown by the function, the transaction 
+     will be rolled back."
+    shared void transaction(Boolean do()) {
+        try (tx = Transaction()) {
+            if (!do()) {
+                tx.rollbackOnly();
+            }
         }
     }
-
-    "Create an `Entry` from the column data at the specified index."
-    String->Object mapColumn(ResultSet rs, ResultSetMetaData meta, Integer idx) {
+    
+    "An [[Entry]] with the column data at the specified 
+     index."
+    String->Object columnEntry(ResultSet rs, ResultSetMetaData meta, Integer idx) {
         String columnName = meta.getColumnName(idx).lowercased;
         Object? x = rs.getObject(idx);
         Object? v;
         //TODO optimize these conversions
         switch (x)
-        case (is Long) { v = x.longValue(); }
+        case (is JBoolean) { v = x.booleanValue(); }
+        case (is JInteger) { v = x.intValue(); }
+        case (is JLong) { v = x.longValue(); }
         case (is JString) { v = x.string; }
         case (is BigDecimal) { v = parseDecimal(x.toPlainString()); }
         case (is BigInteger) { v = parseWhole(x.string); }
+        case (is SqlTimestamp) { v = Instant(x.time).dateTime(); }
+        case (is SqlTime) { v = Instant(x.time).time(); }
+        case (is SqlDate) { v = Instant(x.time).date(); }
         else { v = x; }
         return columnName -> (v else SqlNull(meta.getColumnType(idx)));
     }
 
 }
+

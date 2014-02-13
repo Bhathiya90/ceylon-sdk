@@ -1,15 +1,17 @@
-import java.lang { Math { jmin=min, jmax=max } }
+import java.lang {
+    Math
+}
 
 "The smaller of the two arguments."
 see(`function largest`)
 shared Integer smallest(Integer x, Integer y) {
-    return jmin(x, y);
+    return Math.min(x, y);
 }
 
 "The larger of the two arguments."
 see(`function smallest`)
 shared Integer largest(Integer x, Integer y) {
-    return jmax(x, y);
+    return Math.max(x, y);
 }
 
 "The sum of the given values, or `0` if there are no 

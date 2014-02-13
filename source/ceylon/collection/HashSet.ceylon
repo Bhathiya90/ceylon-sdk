@@ -25,7 +25,7 @@ import ceylon.collection {
  The management of the backing array is controlled by the
  given [[hashtable]]."
 
-by("Stéphane Épardaud", "Gavin King")
+by ("Stéphane Épardaud", "Gavin King")
 shared class HashSet<Element>
         (stability=linked, hashtable = Hashtable(), elements = {})
         satisfies MutableSet<Element>
@@ -139,7 +139,7 @@ shared class HashSet<Element>
     
     // End of initialiser section
     
-    shared actual Boolean add(Element element){
+    shared actual Boolean add(Element element) {
         if(addToStore(store, element)){
             length++;
             checkRehash();
@@ -148,10 +148,12 @@ shared class HashSet<Element>
         return false;
     }
     
-    shared actual Boolean addAll({Element*} elements){
+    shared actual Boolean addAll({Element*} elements) {
         variable Boolean ret = false;
         for(elem in elements){
-            ret ||= add(elem);
+            if (addToStore(store, elem)) {
+                ret = true;
+            }
         }
         if (ret) {
             checkRehash();
@@ -185,7 +187,6 @@ shared class HashSet<Element>
         return result;
     }
     
-    "Removes every element"
     shared actual void clear(){
         variable Integer index = 0;
         // walk every bucket
@@ -224,12 +225,12 @@ shared class HashSet<Element>
     
     shared actual Integer hash {
         variable Integer index = 0;
-        variable Integer hash = 17;
+        variable Integer hash = 0;
         // walk every bucket
-        while(index < store.size){
+        while (index < store.size){
             variable value bucket = store[index];
-            while(exists cell = bucket){
-                hash = hash * 31 + cell.element.hash;
+            while (exists cell = bucket){
+                hash += cell.element.hash;
                 bucket = cell.rest;
             }
             index++;
@@ -257,7 +258,7 @@ shared class HashSet<Element>
         return false;
     }
     
-    shared actual HashSet<Element> clone {
+    shared actual HashSet<Element> clone() {
         value clone = HashSet<Element>();
         clone.length = length;
         clone.store = elementStore<Element>(store.size);
@@ -265,7 +266,7 @@ shared class HashSet<Element>
         // walk every bucket
         while(index < store.size){
             if(exists bucket = store[index]){
-                clone.store.set(index, bucket.clone); 
+                clone.store.set(index, bucket.clone()); 
             }
             index++;
         }
